@@ -31,10 +31,17 @@ export async function uploadToS3(
 ): Promise<string> {
   const key = `${folder}/${userId}/${Date.now()}-${file.name}`;
 
+  // Convert File → ArrayBuffer → Uint8Array.
+  // The AWS SDK v3 bundled via Vite cannot stream a raw File object in the
+  // browser (triggers "t.getReader is not a function"). Passing a Uint8Array
+  // bypasses the stream path and works reliably across all browsers.
+  const arrayBuffer = await file.arrayBuffer();
+  const body = new Uint8Array(arrayBuffer);
+
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: key,
-    Body: file,
+    Body: body,
     ContentType: file.type,
   });
 
