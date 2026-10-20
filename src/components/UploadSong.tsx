@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadToS3 } from "@/lib/s3";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload } from "lucide-react";
 
@@ -28,32 +29,16 @@ const UploadSong = () => {
 
       if (!user) throw new Error("Not authenticated");
 
-      // Upload audio file
-      const audioFileName = `${user.id}/${Date.now()}-${audioFile.name}`;
-      const { data: audioData, error: audioError } = await supabase.storage
-        .from("audio-files")
-        .upload(audioFileName, audioFile);
+      // Upload audio file to AWS S3
+      const audioUrl = await uploadToS3(audioFile, "audio", user.id);
 
-      if (audioError) throw audioError;
-
-      const audioUrl = supabase.storage.from("audio-files").getPublicUrl(audioData.path)
-        .data.publicUrl;
-
-      // Upload thumbnail if provided
-      let thumbnailUrl = null;
+      // Upload thumbnail to AWS S3 (if provided)
+      let thumbnailUrl: string | null = null;
       if (thumbnailFile) {
-        const thumbnailFileName = `${user.id}/${Date.now()}-${thumbnailFile.name}`;
-        const { data: thumbnailData, error: thumbnailError } = await supabase.storage
-          .from("thumbnails")
-          .upload(thumbnailFileName, thumbnailFile);
-
-        if (thumbnailError) throw thumbnailError;
-
-        thumbnailUrl = supabase.storage.from("thumbnails").getPublicUrl(thumbnailData.path)
-          .data.publicUrl;
+        thumbnailUrl = await uploadToS3(thumbnailFile, "thumbnails", user.id);
       }
 
-      // Create song record
+      // Save song metadata to Supabase database
       const { error: songError } = await supabase.from("songs").insert({
         title,
         artist_name: artistName,
@@ -76,7 +61,7 @@ const UploadSong = () => {
       setThumbnailFile(null);
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: "Upload failed",
         description: error.message,
         variant: "destructive",
       });
@@ -84,6 +69,7 @@ const UploadSong = () => {
       setLoading(false);
     }
   };
+
 
   return (
     <Card className="glass-effect border-primary/20">
